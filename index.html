@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Nextwise · Personal Productivity</title>
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- iOS ignores the manifest's icons and reads this one. -->
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Nextwise" />
+    <!-- Lets the page paint under the status bar so the dark surface runs to
+         the top edge instead of leaving a white band. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- The browser chrome has to follow the theme, or a dark install shows a
+         light address bar and vice versa. -->
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#080a11" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eceff6" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

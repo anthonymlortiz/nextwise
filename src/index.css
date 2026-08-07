@@ -1,0 +1,378 @@
+@import 'tailwindcss';
+
+/*
+ * Theming.
+ *
+ * Every colour in the app resolves through a token below, so light mode is a
+ * matter of redefining the tokens rather than annotating hundreds of elements.
+ * The rule when adding UI: never hardcode `white/x`, `black/x` or a raw palette
+ * shade for text — reach for `fg`, `mist-*`, `line*`, `raise-*` or a semantic
+ * colour (`danger`, `warn`, `good`, `deep`, `work`, `personal`).
+ *
+ * The scales keep their meaning across both themes rather than their luminance:
+ * `mist-200` is always the most prominent secondary text and `mist-500` the
+ * faintest, `ink-800` is always the raised card sitting on `ink-900`.
+ */
+@theme {
+  /* Surfaces, page base to raised. */
+  --color-ink-900: #080a11;
+  --color-ink-850: #0c0f18;
+  --color-ink-800: #11151f;
+  --color-ink-700: #1a1f2c;
+  --color-ink-600: #262c3c;
+
+  /* Secondary text, faintest to strongest. */
+  --color-mist-500: #7f8a9f;
+  --color-mist-400: #99a3ba;
+  --color-mist-300: #aab3c8;
+  --color-mist-200: #ccd3e2;
+
+  /* Primary text. Not the same as `white`: on an accent fill white is correct
+     in both themes, but body copy has to flip. */
+  --color-fg: #ffffff;
+
+  --color-accent-500: #585bf0;
+  --color-accent-400: #818cf8;
+
+  /* Hairlines. */
+  --color-line: rgb(255 255 255 / 0.09);
+  --color-line-strong: rgb(255 255 255 / 0.17);
+  --color-line-soft: rgb(255 255 255 / 0.05);
+
+  /* Translucent overlays that lift an element off its surface:
+     1 = resting, 2 = hover, 3 = selected. */
+  --color-raise-1: rgb(255 255 255 / 0.035);
+  --color-raise-2: rgb(255 255 255 / 0.065);
+  --color-raise-3: rgb(255 255 255 / 0.11);
+
+  --color-scrim: rgb(0 0 0 / 0.6);
+
+  /* The priority rail down the left edge of a task row. Rails need their own
+     tokens rather than sharing the text ones: text has to clear 4.5:1 on the
+     card, while a rail only needs 3:1 and must *not* shout, so the two pull in
+     opposite directions. Alpha is baked in per theme to keep the ramp — P1
+     loudest, P4 nearly silent — reading the same way on black and on white. */
+  --color-rail-1: rgb(251 113 133 / 0.85);
+  --color-rail-2: rgb(245 158 11 / 0.72);
+  --color-rail-3: rgb(56 189 248 / 0.45);
+  --color-rail-4: var(--color-line-strong);
+
+  /* Links sit inside body and tertiary text, so they need to read as
+     interactive against both without shouting. */
+  --color-link: #a5b4fc;
+
+  /* Semantic colours, used for text on a tinted or plain surface. */
+  --color-danger: #fda4af;
+  --color-warn: #fcd34d;
+  --color-good: #6ee7b7;
+  --color-deep: #c4b5fd;
+  --color-work: #a5b4fc;
+  --color-personal: #f0abfc;
+}
+
+:root {
+  color-scheme: dark;
+
+  --app-bg:
+    radial-gradient(1200px 700px at 50% -20%, #18203a 0%, transparent 70%), var(--color-ink-900);
+  --shadow-card:
+    0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 12px 32px -12px rgb(0 0 0 / 0.6);
+  --shadow-pop: 0 16px 48px -12px rgb(0 0 0 / 0.75);
+  --scrollbar-thumb: #232a3b;
+  --scrollbar-thumb-hover: #313a51;
+  --checkbox-border: rgb(255 255 255 / 0.22);
+  --checkbox-bg: rgb(255 255 255 / 0.05);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    /* Cards stay lighter than the page in both themes, so the raised-surface
+       relationship survives the flip: here the page is tinted and cards white. */
+    --color-ink-900: #eceff6;
+    --color-ink-850: #f2f4f9;
+    --color-ink-800: #ffffff;
+    --color-ink-700: #f7f9fc;
+    --color-ink-600: #e3e8f0;
+
+    --color-mist-500: #626b7e;
+    --color-mist-400: #4b5468;
+    --color-mist-300: #434c60;
+    --color-mist-200: #2c3446;
+
+    --color-fg: #0b1020;
+
+    /* A touch deeper than the dark-mode accent so it holds contrast on white. */
+    --color-accent-500: #4f46e5;
+    --color-accent-400: #6366f1;
+
+    --color-line: rgb(15 23 42 / 0.1);
+    --color-line-strong: rgb(15 23 42 / 0.2);
+    --color-line-soft: rgb(15 23 42 / 0.07);
+
+    --color-raise-1: rgb(15 23 42 / 0.03);
+    --color-raise-2: rgb(15 23 42 / 0.055);
+    --color-raise-3: rgb(15 23 42 / 0.09);
+
+    --color-scrim: rgb(15 23 42 / 0.35);
+
+    /* Amber and sky wash out badly on white, so the light rails drop two or
+       three steps down the ramp to hold the same relative prominence. */
+    --color-rail-1: #e11d48;
+    --color-rail-2: #d97706;
+    --color-rail-3: rgb(2 132 199 / 0.55);
+    --color-rail-4: var(--color-line-strong);
+
+    --color-link: #4338ca;
+
+    /* Darkened so they stay legible on a light tint rather than washing out. */
+    --color-danger: #be123c;
+    --color-warn: #b45309;
+    --color-good: #047857;
+    --color-deep: #6d28d9;
+    --color-work: #4338ca;
+    --color-personal: #a21caf;
+
+    --app-bg:
+      radial-gradient(1200px 700px at 50% -20%, #dfe6f5 0%, transparent 70%),
+      var(--color-ink-900);
+    --shadow-card:
+      0 1px 0 0 rgb(255 255 255 / 0.8) inset, 0 8px 24px -14px rgb(15 23 42 / 0.28);
+    --shadow-pop:
+      0 6px 12px -4px rgb(15 23 42 / 0.12), 0 24px 48px -16px rgb(15 23 42 / 0.4);
+    --scrollbar-thumb: #c3cbdb;
+    --scrollbar-thumb-hover: #a9b3c7;
+    --checkbox-border: rgb(15 23 42 / 0.28);
+    --checkbox-bg: rgb(255 255 255 / 0.9);
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* `viewport-fit=cover` lets the background run to the physical edges of the
+     screen; these insets keep the *content* out from under the notch, the
+     status bar and the home indicator. Zero everywhere else. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  box-sizing: border-box;
+  background: var(--app-bg);
+  background-attachment: fixed;
+  color: var(--color-mist-200);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings and stats hold their width while numbers change, so a ticking
+   counter or a re-sorted list doesn't shuffle the layout sideways. */
+h1,
+h2,
+.tnum {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.011em;
+}
+
+/* Elevation is theme-dependent — a black drop shadow that reads as depth on a
+   dark page turns to grime on a light one — so it lives here, not in a class
+   list. */
+.elev-card {
+  box-shadow: var(--shadow-card);
+}
+
+.elev-pop {
+  box-shadow: var(--shadow-pop);
+}
+
+/* Row actions stay out of the way until the pointer arrives, which is what
+   keeps the board quiet. A touch device has no pointer and never fires hover,
+   so the naive `opacity-0 group-hover:opacity-100` leaves Start, Edit and
+   Delete permanently invisible — and the task unreachable. Hiding is therefore
+   opt-in to hover-capable input, not the default. */
+.reveal {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .reveal {
+    opacity: 0;
+  }
+
+  .group:hover .reveal,
+  .reveal:focus-within,
+  .reveal:focus-visible {
+    opacity: 1;
+  }
+}
+
+/* A horizontally scrollable strip (the tab bar on a narrow screen) should not
+   carry a scrollbar that would eat into an already tight row. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Grows a small control's hit area to the ~44px Apple/WCAG guidance without
+   changing what is drawn. Anything a finger has to land on gets this. */
+.tap {
+  position: relative;
+}
+
+.tap::after {
+  content: '';
+  position: absolute;
+  inset: -11px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent-500) 40%, transparent);
+  color: var(--color-fg);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+/* A single consistent keyboard ring everywhere. Mouse clicks stay clean
+   because :focus-visible only fires for keyboard and assistive input. */
+:focus-visible {
+  outline: 2px solid var(--color-accent-400);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* Chrome stops honouring color-scheme for the unfilled part of a range once
+   accent-color is set, so the track stays white on a dark page. Drawing both
+   halves by hand keeps the fill indicator and puts the colours under our
+   control; `--pct` is set inline by whoever renders the input. */
+input[type='range'] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent-500) var(--pct, 50%),
+    var(--color-raise-3) var(--pct, 50%)
+  );
+}
+
+input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.3125rem;
+  border-radius: 999px;
+  background: var(--color-accent-500);
+  border: 2px solid var(--color-ink-800);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+}
+
+input[type='range']::-moz-range-track {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--color-raise-3);
+}
+
+input[type='range']::-moz-range-progress {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--color-accent-500);
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  background: var(--color-accent-500);
+  border: 2px solid var(--color-ink-800);
+}
+
+/* Native checkboxes render as bright white boxes on a dark surface, and
+   accent-color only tints the *checked* fill — the empty state stays white. So
+   these are drawn from scratch while remaining real checkbox inputs, which
+   keeps keyboard behaviour, labels and assistive tech working. */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  margin: 0;
+  border: 1px solid var(--checkbox-border);
+  border-radius: 0.3rem;
+  background: var(--checkbox-bg);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+input[type='checkbox']:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent-500) 70%, transparent);
+  background: color-mix(in srgb, var(--color-accent-500) 15%, transparent);
+}
+
+input[type='checkbox']:checked {
+  border-color: var(--color-accent-500);
+  background-color: var(--color-accent-500);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M2.5 6.2l2.4 2.4 4.6-5'/%3E%3C/svg%3E");
+  background-size: 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
