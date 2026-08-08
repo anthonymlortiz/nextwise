@@ -51,6 +51,15 @@ git -C "$site_repo" pull --ff-only
 echo "==> Building for /$site_path/"
 BASE_PATH="/$site_path/" npm run build
 
+# Record which source commit produced this build. Without it the published
+# bundle cannot be traced back to anything, since dist/ is not versioned.
+source_sha="$(git -C "$project_root" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+source_dirty=""
+if [[ -n "$(git -C "$project_root" status --porcelain 2>/dev/null)" ]]; then
+  source_dirty=" (uncommitted changes)"
+  echo "!!  Source tree has uncommitted changes; this build is not reproducible from git." >&2
+fi
+
 echo "==> Syncing dist/ into $site_path/"
 mkdir -p "$site_repo/$site_path"
 # --delete so a renamed hashed asset does not leave its predecessor behind.
@@ -72,7 +81,7 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
-git commit -q -m "Deploy Nextwise to /$site_path/"
+git commit -q -m "Deploy Nextwise to /$site_path/" -m "Built from nextwise@${source_sha}${source_dirty}"
 git push -q
 
 echo
