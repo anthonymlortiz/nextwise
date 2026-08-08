@@ -54,7 +54,8 @@ The same task list produces genuinely different advice:
   timer, its notes and a checklist. See [The focus session](#the-focus-session)
 - **Tags, notes, search, and sorting**
 - **jAIme, a chat assistant** that can read your board, add and edit tasks, set your
-  context and explain what to work on — see [Talking to jAIme](#talking-to-jaime)
+  context and explain what to work on — dictate to it and have it read back if you like.
+  See [Talking to jAIme](#talking-to-jaime)
 - **Two-way sync with Microsoft To Do and Google Tasks** — either or both at once;
   see [Syncing](#syncing-with-microsoft-to-do-and-google-tasks)
 - **Your board in your own private GitHub repo** — one JSON file, merged both ways, so
@@ -279,6 +280,12 @@ aren't already running.
 - `tests/chat.mjs` — 55 assertions on jAIme: every tool against a real database, the
   key gate, and full conversations driven by `src/chat/fakeClaude.ts`, a scripted
   stand-in for the Anthropic API so the loop is testable without a key or a network.
+- `tests/voice.mjs` — 48 assertions on speaking to jAIme and being read back: that
+  dictation fills the composer without ever sending on your behalf, that it adds to a
+  typed draft, that a refused microphone says so instead of failing silently, that only
+  prose is spoken and never tool lines or errors, that turning speech on mid-conversation
+  doesn't recite the backlog, and that leaving the tab shuts it up. Driven by
+  `src/fakeVoice.ts`, since headless Chrome has neither a microphone nor a voice.
 - `tests/dates.mjs` — 60 assertions on the calendar picker and the date helpers behind
   it, including days that cross a daylight-saving boundary, month-end clamping and a
   guard that dates never round-trip through UTC.
@@ -353,6 +360,30 @@ job is to interpret you and relay the answer, not to invent its own ordering.
 
 Every action jAIme takes is printed in the transcript as it happens, so a conversation is
 also an audit trail.
+
+### Talking out loud
+
+The composer has a **microphone** and a **speaker** button.
+
+- **The microphone dictates into the box.** It fills the composer and stops there — it
+  never sends on your behalf. You read what it heard, fix it, and press Send. If you had
+  already started typing, dictation is appended rather than pasted over the top.
+- **The speaker reads replies aloud**, and is **off until you turn it on**. Only jAIme's
+  prose is spoken; the tool lines and error messages are not. There's a **Stop speaking**
+  link while it talks, and leaving the tab stops it too.
+
+Both are hidden on a browser that can't do them, and the setting is remembered.
+
+**Where the audio goes is worth knowing.** Speech *output* is entirely local — your
+operating system's own voices, no network. Speech *input* uses the browser's built-in
+recognition, and **Chrome implements that by uploading the audio to Google**. Safari on
+iOS and macOS can transcribe on-device. That makes dictation the one part of this app that
+may talk to a company you don't have an account with, which is why it's opt-in per use
+(nothing is captured until you press the button), why the app says so on screen while it's
+listening, and why it sits behind a swappable interface — an on-device model can replace
+it without touching anything else.
+
+Your Anthropic key is no help here: the Messages API accepts text and images, not audio.
 
 ## Syncing with Microsoft To Do and Google Tasks
 

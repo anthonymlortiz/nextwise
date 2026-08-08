@@ -52,6 +52,8 @@ export async function installDevHooks(): Promise<void> {
     googleMapping,
     auth,
     FakeClaudeTransport: fakeClaude.FakeClaudeTransport,
+    FakeVoiceEngine: (await import('./fakeVoice')).FakeVoiceEngine,
+    voice: await import('./voice'),
     chatKey,
     chatTools,
     session: await import('./session'),

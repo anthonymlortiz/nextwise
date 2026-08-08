@@ -4,6 +4,8 @@ import { Button, Card, SectionTitle, TextInput } from '../ui';
 import { useChat } from '../chat/useChat';
 import type { ChatTransport } from '../chat/client';
 import { clearApiKey, getApiKey, isRemembered, looksLikeApiKey, setApiKey } from '../chat/key';
+import type { VoiceEngine, VoiceSession } from '../voice';
+import { loadVoicePrefs, setSpeakReplies, webSpeechEngine } from '../voice';
 
 const SUGGESTIONS = [
   'What should I work on?',
@@ -11,6 +13,12 @@ const SUGGESTIONS = [
   'Add: draft the Q3 planning doc, deep work, about an hour',
   "What's left on my work projects?",
 ];
+
+/** Joins a typed draft to dictated text without gluing the two words together. */
+function join(base: string, spoken: string): string {
+  if (!base.trim()) return spoken;
+  return `${base.trimEnd()} ${spoken}`;
+}
 
 /**
  * The key form is a gate rather than a settings page: without a key the panel
@@ -88,10 +96,12 @@ export function ChatPanel({
   context,
   setContext,
   transport,
+  voice = webSpeechEngine,
 }: {
   context: Situation;
   setContext: (patch: Partial<Situation>) => void;
   transport?: ChatTransport;
+  voice?: VoiceEngine;
 }) {
   const [hasKey, setHasKey] = useState(() => !!getApiKey());
   const [draft, setDraft] = useState('');
@@ -106,17 +116,93 @@ export function ChatPanel({
     setContext,
   });
 
+  const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
+  const [speakOn, setSpeakOn] = useState(() => loadVoicePrefs().speak);
+  const [speaking, setSpeaking] = useState(false);
+  const session = useRef<VoiceSession | null>(null);
+  // What the composer held when the mic opened, so dictation adds to a typed
+  // draft instead of wiping it.
+  const dictationBase = useRef('');
+  const canListen = voice.canListen();
+  const canSpeak = voice.canSpeak();
+
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [entries.length]);
 
+  const spokenUpTo = useRef(0);
+  useEffect(() => {
+    // Only ever speak assistant prose, and only what arrived since the last
+    // pass: tool lines are bookkeeping and errors are already shown in red.
+    const fresh = entries.filter(
+      (entry) => entry.id > spokenUpTo.current && entry.role === 'assistant',
+    );
+    // The marker moves even when speech is off, so switching it on reads the
+    // next reply rather than reciting the whole conversation so far.
+    if (entries.length) spokenUpTo.current = entries[entries.length - 1].id;
+    if (!speakOn || !canSpeak) return;
+    const text = fresh.map((entry) => entry.text).join(' ');
+    if (!text.trim()) return;
+    setSpeaking(true);
+    voice.speak(text, { onDone: () => setSpeaking(false) });
+  }, [entries, speakOn, canSpeak, voice]);
+
+  useEffect(() => {
+    return () => {
+      session.current?.abort();
+      voice.cancelSpeech();
+    };
+  }, [voice]);
+
   if (!hasKey) return <KeyGate onSaved={() => setHasKey(true)} />;
 
   const submit = (text: string) => {
     if (!text.trim() || busy) return;
+    session.current?.abort();
+    setListening(false);
     send(text);
     setDraft('');
+  };
+
+  const startListening = () => {
+    setVoiceError('');
+    dictationBase.current = draft;
+    // Speaking over the microphone gets the reply transcribed back as input.
+    voice.cancelSpeech();
+    setSpeaking(false);
+    setListening(true);
+    session.current = voice.listen({
+      onInterim: (text) => setDraft(join(dictationBase.current, text)),
+      onFinal: (text) => {
+        setListening(false);
+        session.current = null;
+        // An empty result means nothing was heard; leave the typed draft be.
+        if (text.trim()) setDraft(join(dictationBase.current, text));
+      },
+      onError: (_kind, message) => {
+        setListening(false);
+        session.current = null;
+        setVoiceError(message);
+      },
+    });
+  };
+
+  const stopListening = () => {
+    session.current?.stop();
+    session.current = null;
+    setListening(false);
+  };
+
+  const toggleSpeak = () => {
+    const next = !speakOn;
+    setSpeakOn(next);
+    setSpeakReplies(next);
+    if (!next) {
+      voice.cancelSpeech();
+      setSpeaking(false);
+    }
   };
 
   return (
@@ -203,7 +289,7 @@ export function ChatPanel({
       </div>
 
       <form
-        className="flex items-center gap-2 border-t border-line px-5 py-3"
+        className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3"
         onSubmit={(e) => {
           e.preventDefault();
           submit(draft);
@@ -212,15 +298,98 @@ export function ChatPanel({
         <TextInput
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="What should I work on?"
+          placeholder={listening ? 'Listening…' : 'What should I work on?'}
           aria-label="Message jAIme"
-          className="flex-1"
+          className="min-w-0 flex-1"
           disabled={busy}
         />
+        {canListen && (
+          <button
+            type="button"
+            onClick={listening ? stopListening : startListening}
+            disabled={busy}
+            aria-label={listening ? 'Stop dictating' : 'Dictate message'}
+            aria-pressed={listening}
+            title="Dictate. Your browser transcribes the audio; Chrome sends it to Google."
+            data-voice-mic
+            data-voice-state={listening ? 'listening' : 'idle'}
+            className={`tap inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              listening
+                ? 'border-danger/40 bg-danger/15 text-danger'
+                : 'border-line bg-raise-1 text-mist-300 hover:border-line-strong hover:bg-raise-3'
+            }`}
+          >
+            <MicIcon active={listening} />
+          </button>
+        )}
+        {canSpeak && (
+          <button
+            type="button"
+            onClick={toggleSpeak}
+            aria-label={speakOn ? 'Stop reading replies aloud' : 'Read replies aloud'}
+            aria-pressed={speakOn}
+            data-voice-speak={speakOn ? 'on' : 'off'}
+            className={`tap inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+              speakOn
+                ? 'border-accent-500/40 bg-accent-500/15 text-fg'
+                : 'border-line bg-raise-1 text-mist-300 hover:border-line-strong hover:bg-raise-3'
+            }`}
+          >
+            <SpeakerIcon on={speakOn} />
+          </button>
+        )}
         <Button type="submit" variant="primary" disabled={busy || !draft.trim()}>
           Send
         </Button>
       </form>
+
+      {(listening || voiceError || speaking) && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-2 text-xs">
+          {listening && (
+            <span className="flex items-center gap-2 text-mist-400" data-voice-note>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-danger" />
+              Listening — audio is sent to your browser&rsquo;s speech service to be
+              transcribed.
+            </span>
+          )}
+          {speaking && !listening && (
+            <button
+              type="button"
+              onClick={() => {
+                voice.cancelSpeech();
+                setSpeaking(false);
+              }}
+              className="text-mist-300 underline underline-offset-2 hover:text-fg"
+              data-voice-stop-speaking
+            >
+              Stop speaking
+            </button>
+          )}
+          {voiceError && (
+            <span className="text-warn" data-voice-error>
+              {voiceError}
+            </span>
+          )}
+        </div>
+      )}
     </Card>
+  );
+}
+
+function MicIcon({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <rect x="9" y="3" width="6" height="11" rx="3" fill={active ? 'currentColor' : 'none'} />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    </svg>
+  );
+}
+
+function SpeakerIcon({ on }: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 9v6h4l5 4V5L8 9H4z" fill={on ? 'currentColor' : 'none'} />
+      {on ? <path d="M17 8.5a5 5 0 0 1 0 7" /> : <path d="M17 9.5l4 5m0-5l-4 5" />}
+    </svg>
   );
 }

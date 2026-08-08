@@ -19,6 +19,15 @@ eq('google setup guidance present', await js(`document.body.innerText.includes('
 eq('connect gated on client id', await js(`[...document.querySelectorAll('button')].find(b=>b.innerText.includes('Connect Microsoft To Do')).disabled`), true);
 eq('google connect gated too', await js(`[...document.querySelectorAll('button')].find(b=>b.innerText.includes('Connect Google Tasks')).disabled`), true);
 eq('in-memory fakes stay out of the bundle', await js(`performance.getEntriesByType('resource').filter(x=>/fake/i.test(x.name)).length`), 0);
+// The resource check only catches a fake that got its own chunk. These are the
+// hooks the fakes are injected through, and they are string property names a
+// minifier keeps, so their absence is what actually proves the DEV-only
+// branches were eliminated rather than merely inlined.
+eq('the dev injection hooks are compiled away', await js(`(async () => {
+  const scripts = performance.getEntriesByType('resource').filter(x => /\\.js(\\?|$)/.test(x.name));
+  const sources = await Promise.all(scripts.map(s => fetch(s.name).then(r => r.text())));
+  return sources.filter(src => /__fbVoiceEngine|__fbChatTransport/.test(src)).length;
+})()`), 0);
 await click('Focus'); await wait(300);
 eq('focus still recommends', await js(`document.body.innerText.toUpperCase().includes('JAIME RECOMMENDS')`), true);
 await click('jAIme'); await wait(300);

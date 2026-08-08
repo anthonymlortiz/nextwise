@@ -21,6 +21,7 @@ import { FocusPanel } from './components/FocusPanel';
 import { FocusSessionView } from './components/FocusSession';
 import { ChatPanel } from './components/ChatPanel';
 import type { ChatTransport } from './chat/client';
+import type { VoiceEngine } from './voice';
 import { TasksPanel, type ProjectFilter } from './components/TasksPanel';
 import { ProjectsPanel } from './components/ProjectsPanel';
 import { DataControls } from './components/DataControls';
@@ -455,6 +456,13 @@ export default function App() {
                   ? (globalThis as Record<string, unknown>).__fbChatTransport as
                       | ChatTransport
                       | undefined
+                  : undefined
+              }
+              voice={
+                import.meta.env.DEV
+                  ? ((globalThis as Record<string, unknown>).__fbVoiceEngine as
+                      | VoiceEngine
+                      | undefined)
                   : undefined
               }
             />

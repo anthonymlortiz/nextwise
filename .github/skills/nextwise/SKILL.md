@@ -153,6 +153,8 @@ src/
     useChat.ts      the tool-use loop and the system prompt
     key.ts          API key storage: memory by default, opt-in persist
     fakeClaude.ts   scriptable stand-in used by the tests
+  voice.ts          the VoiceEngine seam: Web Speech in, speechSynthesis out
+  fakeVoice.ts      scriptable stand-in — headless Chrome has no mic and no voices
   backup/
     snapshot.ts     the JSON board format and every merge rule — pure, no Dexie
     store.ts        the Dexie side: readLocal, applySnapshot, recordGrave, backfillUids
@@ -400,6 +402,37 @@ still holds.
 - `MAX_STEPS` in `useChat.ts` caps the tool loop. A loop that cannot terminate is billed
   to the user one request at a time.
 
+### Voice
+
+`src/voice.ts` is a seam (`VoiceEngine`), used only by `ChatPanel`. Dictation fills the
+composer; the user still presses Send.
+
+- **The Claude key cannot do speech.** The Messages API takes text and images, not audio.
+  Don't reach for it — STT and TTS both come from the browser.
+- **Chrome's `SpeechRecognition` uploads the audio to Google.** That makes dictation the
+  only outbound traffic in the app to a party the user has no account with, which is why
+  constraint 1 survives only because the seam exists and it is disclosed on screen while
+  listening. Never make it silent, never make it start without a press, and keep the seam
+  so an on-device model can replace it.
+- **Chrome truncates a long `speechSynthesis` utterance** (~15 s, long-standing bug), so
+  `chunkForSpeech` splits a reply on sentence boundaries at ~180 chars, with a word-level
+  fallback for one very long sentence. It also makes stopping responsive.
+- **Speech defaults off** (`pp.voice.v1`) and only assistant prose is spoken — never tool
+  lines, never errors. An assistant that starts talking in a quiet office unprompted is a
+  setting people turn off once and never trust again.
+- **The "already spoken" marker advances even while speech is off.** Otherwise switching
+  it on mid-conversation recites the whole history. `tests/voice.mjs` §6 pins this; it is
+  a bug that was actually shipped in the first draft.
+- **`aborted` is not an error.** It is what the browser reports when the user presses
+  stop, so surfacing it would paint every normal use red.
+- Leaving the tab unmounts `ChatPanel`, whose cleanup aborts listening and cancels speech.
+  Speech outlives the component that started it, so without that it keeps talking.
+- **StrictMode double-invokes the mount effect**, so the engine legitimately sees one
+  `cancelSpeech()` before anything happens. Assert cancellation as a *delta*, never as an
+  absolute count.
+- Untested on a real iOS device: `continuous` recognition and `speechSynthesis` in
+  standalone PWA mode are both documented as flaky there.
+
 ## Recommender
 
 `recommender.ts` is pure — no React, no Dexie, no `Date.now()` passed implicitly. Keep it
@@ -477,6 +510,7 @@ Suites, in run order (`migration` must stay first — it rebuilds the database f
 | `syncui.mjs` | the Sync tab, lazy-loaded SDKs, persistence |
 | `projects.mjs` | expanding a project to see its tasks, and the inline project editor |
 | `chat.mjs` | jAIme's tools, the key gate, and conversations via the Claude fake |
+| `voice.mjs` | dictation into the composer and spoken replies, via the voice fake |
 | `dates.mjs` | the calendar picker and the local-time date helpers behind it |
 | `links.mjs` | clickable links in task text, and the schemes that must never render |
 | `theme.mjs` | the light/dark flip, and measured contrast of every text node in both |

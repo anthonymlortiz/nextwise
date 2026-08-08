@@ -40,7 +40,7 @@ else
   START=(env HTTPS=0 npx vite --port 5174 --strictPort)
   # migration runs first: it rebuilds the database from scratch to replay the
   # v2 -> v4 upgrade, so it must not land in the middle of another suite.
-  SUITES=(${SUITES_OVERRIDE:-tests/migration.mjs tests/engine.mjs tests/google.mjs tests/dual.mjs tests/syncui.mjs tests/projects.mjs tests/chat.mjs tests/dates.mjs tests/links.mjs tests/theme.mjs tests/fields.mjs tests/session.mjs tests/backup.mjs})
+  SUITES=(${SUITES_OVERRIDE:-tests/migration.mjs tests/engine.mjs tests/google.mjs tests/dual.mjs tests/syncui.mjs tests/projects.mjs tests/chat.mjs tests/voice.mjs tests/dates.mjs tests/links.mjs tests/theme.mjs tests/fields.mjs tests/session.mjs tests/backup.mjs})
 fi
 
 # Reuse an already-running server; --strictPort keeps the suites' hardcoded
