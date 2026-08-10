@@ -430,6 +430,14 @@ composer; the user still presses Send.
 - **StrictMode double-invokes the mount effect**, so the engine legitimately sees one
   `cancelSpeech()` before anything happens. Assert cancellation as a *delta*, never as an
   absolute count.
+- **The composer is a `<textarea>`, not an `<input>`**, and auto-grows to ~6 lines. A
+  single line was 159px wide at 390px once the mic, speaker and Send shared its row —
+  three words of a twenty-one word dictation, which defeats the point of filling the
+  composer for review. Tests therefore match it as `[aria-label="Message jAIme"]` with no
+  tag, and pick the native value setter from `tagName`.
+- **Auto-growing a border-box control needs the border added back to `scrollHeight`**,
+  which covers content and padding but not the border. Two pixels short is enough to
+  scroll the last line out of view.
 - Untested on a real iOS device: `continuous` recognition and `speechSynthesis` in
   standalone PWA mode are both documented as flaky there.
 
