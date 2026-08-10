@@ -32,6 +32,6 @@ await click('Focus'); await wait(300);
 eq('focus still recommends', await js(`document.body.innerText.toUpperCase().includes('JAIME RECOMMENDS')`), true);
 await click('jAIme'); await wait(300);
 eq('chat ships in production', await js(`document.body.innerText.toUpperCase().includes('CONNECT JAIME')`), true);
-eq('and is gated on the user supplying a key', await js(`!document.querySelector('input[aria-label="Message jAIme"]')`), true);
+eq('and is gated on the user supplying a key', await js(`!document.querySelector('[aria-label="Message jAIme"]')`), true);
 const okAll = r.done(t.errors);
 t.close(); process.exit(okAll?0:1);

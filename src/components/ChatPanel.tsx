@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Situation } from '../types';
-import { Button, Card, SectionTitle, TextInput } from '../ui';
+import { Button, Card, SectionTitle, TextArea, TextInput } from '../ui';
 import { useChat } from '../chat/useChat';
 import type { ChatTransport } from '../chat/client';
 import { clearApiKey, getApiKey, isRemembered, looksLikeApiKey, setApiKey } from '../chat/key';
@@ -19,6 +19,12 @@ function join(base: string, spoken: string): string {
   if (!base.trim()) return spoken;
   return `${base.trimEnd()} ${spoken}`;
 }
+
+/**
+ * How tall the composer may grow before it scrolls instead. Roughly six lines —
+ * enough for a dictated paragraph, short of swallowing the conversation.
+ */
+const COMPOSER_MAX_PX = 160;
 
 /**
  * The key form is a gate rather than a settings page: without a key the panel
@@ -131,6 +137,23 @@ export function ChatPanel({
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [entries.length]);
+
+  // The composer grows to fit what it holds. Dictation routinely produces a
+  // sentence or three, and a single line on a 390px screen showed three words
+  // of it — which makes "read it before sending" impossible on the one device
+  // this app is mainly used from.
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    // `scrollHeight` covers content and padding but not the border, while the
+    // height being set is a border-box one. Without adding it back the box
+    // lands two pixels short and scrolls off its own last line.
+    const style = getComputedStyle(el);
+    const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    el.style.height = `${Math.min(el.scrollHeight + border, COMPOSER_MAX_PX)}px`;
+  }, [draft]);
 
   const spokenUpTo = useRef(0);
   useEffect(() => {
@@ -289,58 +312,72 @@ export function ChatPanel({
       </div>
 
       <form
-        className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3"
+        className="grid gap-2 border-t border-line px-5 py-3"
         onSubmit={(e) => {
           e.preventDefault();
           submit(draft);
         }}
       >
-        <TextInput
+        <TextArea
+          ref={composerRef}
+          rows={1}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter sends, Shift+Enter breaks the line. `isComposing` guards an
+            // IME candidate list, where Enter means "accept that word".
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submit(draft);
+            }
+          }}
           placeholder={listening ? 'Listening…' : 'What should I work on?'}
           aria-label="Message jAIme"
-          className="min-w-0 flex-1"
+          className="w-full overflow-y-auto"
+          style={{ resize: 'none', maxHeight: COMPOSER_MAX_PX }}
           disabled={busy}
         />
-        {canListen && (
-          <button
-            type="button"
-            onClick={listening ? stopListening : startListening}
-            disabled={busy}
-            aria-label={listening ? 'Stop dictating' : 'Dictate message'}
-            aria-pressed={listening}
-            title="Dictate. Your browser transcribes the audio; Chrome sends it to Google."
-            data-voice-mic
-            data-voice-state={listening ? 'listening' : 'idle'}
-            className={`tap inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              listening
-                ? 'border-danger/40 bg-danger/15 text-danger'
-                : 'border-line bg-raise-1 text-mist-300 hover:border-line-strong hover:bg-raise-3'
-            }`}
-          >
-            <MicIcon active={listening} />
-          </button>
-        )}
-        {canSpeak && (
-          <button
-            type="button"
-            onClick={toggleSpeak}
-            aria-label={speakOn ? 'Stop reading replies aloud' : 'Read replies aloud'}
-            aria-pressed={speakOn}
-            data-voice-speak={speakOn ? 'on' : 'off'}
-            className={`tap inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${
-              speakOn
-                ? 'border-accent-500/40 bg-accent-500/15 text-fg'
-                : 'border-line bg-raise-1 text-mist-300 hover:border-line-strong hover:bg-raise-3'
-            }`}
-          >
-            <SpeakerIcon on={speakOn} />
-          </button>
-        )}
-        <Button type="submit" variant="primary" disabled={busy || !draft.trim()}>
-          Send
-        </Button>
+        <div className="flex items-center gap-2">
+          {canListen && (
+            <button
+              type="button"
+              onClick={listening ? stopListening : startListening}
+              disabled={busy}
+              aria-label={listening ? 'Stop dictating' : 'Dictate message'}
+              aria-pressed={listening}
+              title="Dictate. Your browser transcribes the audio; Chrome sends it to Google."
+              data-voice-mic
+              data-voice-state={listening ? 'listening' : 'idle'}
+              className={`tap inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                listening
+                  ? 'border-danger/40 bg-danger/15 text-danger'
+                  : 'border-line bg-raise-1 text-mist-300 hover:border-line-strong hover:bg-raise-3'
+              }`}
+            >
+              <MicIcon active={listening} />
+            </button>
+          )}
+          {canSpeak && (
+            <button
+              type="button"
+              onClick={toggleSpeak}
+              aria-label={speakOn ? 'Stop reading replies aloud' : 'Read replies aloud'}
+              aria-pressed={speakOn}
+              data-voice-speak={speakOn ? 'on' : 'off'}
+              className={`tap inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                speakOn
+                  ? 'border-accent-500/40 bg-accent-500/15 text-fg'
+                  : 'border-line bg-raise-1 text-mist-300 hover:border-line-strong hover:bg-raise-3'
+              }`}
+            >
+              <SpeakerIcon on={speakOn} />
+            </button>
+          )}
+          <div className="flex-1" />
+          <Button type="submit" variant="primary" disabled={busy || !draft.trim()}>
+            Send
+          </Button>
+        </div>
       </form>
 
       {(listening || voiceError || speaking) && (

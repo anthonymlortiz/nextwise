@@ -16,7 +16,8 @@ const click = (label) => js(`(()=>{
 const type = (selector, value) => js(`(()=>{
   const i = document.querySelector(${JSON.stringify(selector)});
   if (!i) throw new Error('no input: ' + ${JSON.stringify(selector)});
-  Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(i, ${JSON.stringify(value)});
+  const proto = i.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto,'value').set.call(i, ${JSON.stringify(value)});
   i.dispatchEvent(new Event('input', { bubbles: true })); return 'ok';
 })()`);
 
@@ -128,7 +129,7 @@ await t.send('Page.navigate', { url: t.url });
 await wait(2000);
 await click('jAIme'); await wait(400);
 eq('asks for a key first', await js(`document.body.innerText.toUpperCase().includes('CONNECT JAIME')`), true);
-eq('no message box until connected', await js(`!document.querySelector('input[aria-label="Message jAIme"]')`), true);
+eq('no message box until connected', await js(`!document.querySelector('[aria-label="Message jAIme"]')`), true);
 await type('input[aria-label="Anthropic API key"]', 'not-a-real-key');
 await wait(200);
 eq('warns about an odd-looking key', await js(`document.body.innerText.includes('normally start with')`), true);
@@ -137,7 +138,7 @@ await wait(200);
 eq('warning clears for a plausible key', await js(`document.body.innerText.includes('normally start with')`), false);
 eq('memory-only is the default', await js(`document.querySelector('input[type=checkbox]').checked`), false);
 await click('Save key'); await wait(400);
-eq('the chat opens once connected', await js(`!!document.querySelector('input[aria-label="Message jAIme"]')`), true);
+eq('the chat opens once connected', await js(`!!document.querySelector('[aria-label="Message jAIme"]')`), true);
 eq('the key was not written to disk', await js(`localStorage.getItem('pp.claude.apiKey')`), null);
 
 r.section('8. A conversation that uses tools');
@@ -151,7 +152,7 @@ await js(`(() => {
 })()`);
 // Re-render so App picks the transport up.
 await click('Focus'); await wait(200); await click('jAIme'); await wait(300);
-await type('input[aria-label="Message jAIme"]', 'what should I work on?');
+await type('[aria-label="Message jAIme"]', 'what should I work on?');
 await wait(150);
 await click('Send');
 await wait(900);
@@ -176,7 +177,7 @@ await js(`(() => {
   return 'ok';
 })()`);
 await click('Focus'); await wait(200); await click('jAIme'); await wait(300);
-await type('input[aria-label="Message jAIme"]', 'remind me to water the plants');
+await type('[aria-label="Message jAIme"]', 'remind me to water the plants');
 await wait(150);
 await click('Send');
 await wait(900);
@@ -197,7 +198,7 @@ await js(`(() => {
   return 'ok';
 })()`);
 await click('Focus'); await wait(200); await click('jAIme'); await wait(300);
-await type('input[aria-label="Message jAIme"]', 'finish the dentist one');
+await type('[aria-label="Message jAIme"]', 'finish the dentist one');
 await wait(150);
 await click('Send');
 await wait(1200);
@@ -213,12 +214,12 @@ await js(`(() => {
   return 'ok';
 })()`);
 await click('Focus'); await wait(200); await click('jAIme'); await wait(300);
-await type('input[aria-label="Message jAIme"]', 'hello');
+await type('[aria-label="Message jAIme"]', 'hello');
 await wait(150);
 await click('Send');
 await wait(700);
 eq('the error is shown plainly', await js(`document.body.innerText.includes('That API key was rejected')`), true);
-eq('the input is usable again', await js(`!document.querySelector('input[aria-label="Message jAIme"]').disabled`), true);
+eq('the input is usable again', await js(`!document.querySelector('[aria-label="Message jAIme"]').disabled`), true);
 
 const passed = r.done(t.errors);
 t.close();

@@ -79,7 +79,7 @@ export function TextInput(props: React.ComponentPropsWithRef<'input'>) {
   return <input {...props} className={`${CONTROL} ${props.className ?? ''}`} />;
 }
 
-export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function TextArea(props: React.ComponentPropsWithRef<'textarea'>) {
   return <textarea {...props} className={`${CONTROL} resize-y ${props.className ?? ''}`} />;
 }
 
