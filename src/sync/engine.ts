@@ -81,9 +81,9 @@ export async function runSync(provider: SyncProvider): Promise<SyncResult> {
   };
 
   try {
-    await pushDeletions(provider, result);
-    const { inboxListId, listForProject } = await reconcileLists(provider, result);
-    await syncTasks(provider, result, inboxListId, listForProject);
+    const pending = await pushDeletions(provider, result);
+    const { inboxListId, listForProject } = await reconcileLists(provider, result, pending);
+    await syncTasks(provider, result, inboxListId, listForProject, pending);
     await setState(lastSyncKey(provider.id), String(Date.now()));
   } catch (err) {
     result.ok = false;
@@ -95,11 +95,32 @@ export async function runSync(provider: SyncProvider): Promise<SyncResult> {
 }
 
 /**
+ * Remote records this run failed to delete, so the pull can leave them alone.
+ *
+ * A deletion that could not be pushed is not finished: the local record is
+ * already gone, its link with it, so the pull phase would meet the surviving
+ * server copy as an unrecognised record and create it again. The user would
+ * watch a task they deleted come back.
+ */
+interface PendingDeletions {
+  tasks: Set<string>;
+  lists: Set<string>;
+}
+
+/**
  * Deletions are replayed first so a record deleted locally is removed from the
  * server before the pull phase could see it and helpfully re-create it.
+ *
+ * Whatever is left standing afterwards is reported back rather than merely
+ * logged, because "the delete failed" and "the pull may now resurrect it" are
+ * the same event, and the pull is the only place that can act on it.
  */
-async function pushDeletions(provider: SyncProvider, result: SyncResult): Promise<void> {
+async function pushDeletions(
+  provider: SyncProvider,
+  result: SyncResult,
+): Promise<PendingDeletions> {
   const tombstones = await db.tombstones.where('provider').equals(provider.id).toArray();
+  const pending: PendingDeletions = { tasks: new Set(), lists: new Set() };
 
   for (const tomb of tombstones) {
     try {
@@ -113,11 +134,13 @@ async function pushDeletions(provider: SyncProvider, result: SyncResult): Promis
       // Already gone on the server is a success for our purposes.
       if (!isMissing(err)) {
         result.errors.push(`delete ${tomb.kind} ${tomb.remoteId}: ${describe(err)}`);
+        (tomb.kind === 'task' ? pending.tasks : pending.lists).add(tomb.remoteId);
         continue;
       }
     }
     if (tomb.id !== undefined) await db.tombstones.delete(tomb.id);
   }
+  return pending;
 }
 
 interface ListPlan {
@@ -133,7 +156,11 @@ interface ListPlan {
  * Without that adoption step a user who already has a "Hiring" list would end
  * up with two of them.
  */
-async function reconcileLists(provider: SyncProvider, result: SyncResult): Promise<ListPlan> {
+async function reconcileLists(
+  provider: SyncProvider,
+  result: SyncResult,
+  pending: PendingDeletions,
+): Promise<ListPlan> {
   const remoteLists = (await provider.listLists()).filter((l) => !l.ignore);
   const byId = new Map(remoteLists.map((l) => [l.id, l]));
   const claimed = new Set<string>();
@@ -210,6 +237,10 @@ async function reconcileLists(provider: SyncProvider, result: SyncResult): Promi
   // Lists that exist only on the server become local projects.
   for (const remote of remoteLists) {
     if (claimed.has(remote.id)) continue;
+    // Unless we are still trying to delete this one. The local project is
+    // already gone, so there is nothing to recognise it by, and creating it
+    // would undo the deletion the next push is about to retry.
+    if (pending.lists.has(remote.id)) continue;
 
     const now = Date.now();
     const id = (await db.projects.add({
@@ -284,6 +315,7 @@ async function syncTasks(
   result: SyncResult,
   inboxListId: string,
   listForProject: Map<number, string>,
+  pending: PendingDeletions,
 ): Promise<void> {
   const projects = await db.projects.toArray();
   const domainForList = new Map<string, Domain>();
@@ -303,6 +335,7 @@ async function syncTasks(
         listId,
         domainForList.get(listId) ?? provider.defaultDomain,
         seenRemote,
+        pending,
       );
     } catch (err) {
       result.errors.push(`pull ${listId}: ${describe(err)}`);
@@ -319,6 +352,7 @@ async function pullList(
   listId: string,
   fallbackDomain: Domain,
   seenRemote: Map<string, RemoteTask>,
+  pending: PendingDeletions,
 ): Promise<void> {
   const stored = await getState(cursorKey(provider.id, listId));
   const page = await provider.changedTasks(listId, stored, fallbackDomain);
@@ -356,6 +390,10 @@ async function pullList(
 
   for (const remote of page.tasks) {
     seenRemote.set(remote.id, remote);
+    // Still queued for deletion on this service: the local record is gone and
+    // its link with it, so every check below would read this as a new task and
+    // create it. Skipping it leaves the tombstone for the next run to retry.
+    if (pending.tasks.has(remote.id)) continue;
     let link = await getLinkByRemote(provider.id, 'task', remote.id);
     let local = link ? await db.tasks.get(link.localId) : undefined;
 

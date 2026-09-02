@@ -201,187 +201,198 @@ let seedPromise: Promise<void> | null = null;
 
 /**
  * Populates a first-run example set so the recommender has something to reason
- * about immediately. Only runs when the database is completely empty.
+ * about immediately.
+ *
+ * "First run" means a database that has just been created, not one that merely
+ * looks empty right now. An emptiness test cannot tell the two apart: a user
+ * who deletes their last project has an empty board and would be handed the
+ * demo set back on the next reload, mixed in with whatever they kept. Dexie
+ * fires `populate` once, inside the transaction that creates the database, so
+ * the question is answered by construction and cannot be reopened by deleting
+ * things.
  *
  * StrictMode double-invokes effects in development, so the module-level promise
- * dedupes concurrent callers in this tab and the surrounding transaction keeps
- * the check-then-write atomic against other tabs.
+ * still dedupes concurrent callers in this tab.
  */
 export function seedIfEmpty(): Promise<void> {
-  seedPromise ??= runSeed();
+  seedPromise ??= db.open().then(() => undefined);
   return seedPromise;
 }
 
+db.on('populate', () => {
+  // Returned, not fired and forgotten: Dexie runs this inside the transaction
+  // that creates the database and only waits for the writes if it is handed
+  // the promise. Dropping it on the floor would let the transaction commit
+  // while the seed was still being written.
+  return runSeed();
+});
+
 async function runSeed(): Promise<void> {
-  await db.transaction('rw', db.projects, db.tasks, async () => {
-    if ((await db.projects.count()) > 0) return;
+  const today = todayISO();
+  const iso = (offsetDays: number) => addDays(today, offsetDays);
 
-    const today = todayISO();
-    const iso = (offsetDays: number) => addDays(today, offsetDays);
-
-    const platformId = await db.projects.add({
-      uid: newUid(),
-      name: 'Platform Migration',
-      domain: 'work',
-      color: PALETTE[0],
-      archived: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    const hiringId = await db.projects.add({
-      uid: newUid(),
-      name: 'Hiring',
-      domain: 'work',
-      color: PALETTE[2],
-      archived: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    const homeId = await db.projects.add({
-      uid: newUid(),
-      name: 'Home',
-      domain: 'personal',
-      color: PALETTE[3],
-      archived: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    const healthId = await db.projects.add({
-      uid: newUid(),
-      name: 'Health',
-      domain: 'personal',
-      color: PALETTE[4],
-      archived: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-
-    const samples: Omit<Task, 'id' | 'uid'>[] = [
-      {
-        title: 'Write migration design doc',
-        notes: 'Cover rollback strategy and data backfill.',
-        domain: 'work',
-        projectId: platformId,
-        priority: 1,
-        estimateMin: 90,
-        focusLevel: 'deep',
-        dueDate: iso(2),
-        context: 'laptop',
-        status: 'todo',
-        tags: ['writing'],
-        createdAt: Date.now() - 86400000 * 4,
-        updatedAt: Date.now() - 86400000 * 4,
-      },
-      {
-        title: 'Review PR #482',
-        notes: '',
-        domain: 'work',
-        projectId: platformId,
-        priority: 2,
-        estimateMin: 30,
-        focusLevel: 'medium',
-        dueDate: iso(0),
-        context: 'laptop',
-        status: 'todo',
-        tags: ['review'],
-        createdAt: Date.now() - 86400000,
-        updatedAt: Date.now() - 86400000,
-      },
-      {
-        title: 'Clear inbox and triage tickets',
-        notes: '',
-        domain: 'work',
-        priority: 4,
-        estimateMin: 15,
-        focusLevel: 'shallow',
-        context: 'laptop',
-        status: 'todo',
-        tags: ['admin'],
-        createdAt: Date.now() - 86400000 * 9,
-        updatedAt: Date.now() - 86400000 * 9,
-      },
-      {
-        title: 'Screen 3 candidate resumes',
-        notes: '',
-        domain: 'work',
-        projectId: hiringId,
-        priority: 2,
-        estimateMin: 45,
-        focusLevel: 'medium',
-        dueDate: iso(-1),
-        context: 'laptop',
-        status: 'todo',
-        tags: [],
-        createdAt: Date.now() - 86400000 * 3,
-        updatedAt: Date.now() - 86400000 * 3,
-      },
-      {
-        title: 'Book dentist appointment',
-        notes: '',
-        domain: 'personal',
-        projectId: healthId,
-        priority: 3,
-        estimateMin: 10,
-        focusLevel: 'shallow',
-        dueDate: iso(1),
-        context: 'phone',
-        status: 'todo',
-        tags: ['errand'],
-        createdAt: Date.now() - 86400000 * 12,
-        updatedAt: Date.now() - 86400000 * 12,
-      },
-      {
-        // Shows what "blocked" looks like: real, open, and deliberately absent
-        // from today's recommendations until the note is cleared.
-        title: 'Fix leaking kitchen tap',
-        notes: '',
-        domain: 'personal',
-        projectId: homeId,
-        priority: 2,
-        estimateMin: 60,
-        focusLevel: 'medium',
-        context: 'home',
-        blockedNote: 'the replacement washer arriving',
-        status: 'todo',
-        tags: [],
-        createdAt: Date.now() - 86400000 * 6,
-        updatedAt: Date.now() - 86400000 * 6,
-      },
-      {
-        title: 'Plan next quarter training block',
-        notes: '',
-        domain: 'personal',
-        projectId: healthId,
-        priority: 3,
-        estimateMin: 40,
-        focusLevel: 'deep',
-        context: 'laptop',
-        status: 'todo',
-        tags: [],
-        createdAt: Date.now() - 86400000 * 2,
-        updatedAt: Date.now() - 86400000 * 2,
-      },
-      {
-        // And what "not before" looks like: nothing to do about it this week,
-        // so it stays out of the way until it can actually be started.
-        title: 'Return the parcel to the post office',
-        notes: '',
-        domain: 'personal',
-        priority: 3,
-        estimateMin: 20,
-        focusLevel: 'shallow',
-        dueDate: iso(9),
-        startDate: iso(3),
-        context: 'errand',
-        status: 'todo',
-        tags: [],
-        createdAt: Date.now() - 86400000,
-        updatedAt: Date.now() - 86400000,
-      },
-    ];
-
-    await db.tasks.bulkAdd(samples.map((task) => ({ ...task, uid: newUid() })));
+  const platformId = await db.projects.add({
+    uid: newUid(),
+    name: 'Platform Migration',
+    domain: 'work',
+    color: PALETTE[0],
+    archived: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   });
+  const hiringId = await db.projects.add({
+    uid: newUid(),
+    name: 'Hiring',
+    domain: 'work',
+    color: PALETTE[2],
+    archived: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  const homeId = await db.projects.add({
+    uid: newUid(),
+    name: 'Home',
+    domain: 'personal',
+    color: PALETTE[3],
+    archived: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  const healthId = await db.projects.add({
+    uid: newUid(),
+    name: 'Health',
+    domain: 'personal',
+    color: PALETTE[4],
+    archived: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+
+  const samples: Omit<Task, 'id' | 'uid'>[] = [
+    {
+      title: 'Write migration design doc',
+      notes: 'Cover rollback strategy and data backfill.',
+      domain: 'work',
+      projectId: platformId,
+      priority: 1,
+      estimateMin: 90,
+      focusLevel: 'deep',
+      dueDate: iso(2),
+      context: 'laptop',
+      status: 'todo',
+      tags: ['writing'],
+      createdAt: Date.now() - 86400000 * 4,
+      updatedAt: Date.now() - 86400000 * 4,
+    },
+    {
+      title: 'Review PR #482',
+      notes: '',
+      domain: 'work',
+      projectId: platformId,
+      priority: 2,
+      estimateMin: 30,
+      focusLevel: 'medium',
+      dueDate: iso(0),
+      context: 'laptop',
+      status: 'todo',
+      tags: ['review'],
+      createdAt: Date.now() - 86400000,
+      updatedAt: Date.now() - 86400000,
+    },
+    {
+      title: 'Clear inbox and triage tickets',
+      notes: '',
+      domain: 'work',
+      priority: 4,
+      estimateMin: 15,
+      focusLevel: 'shallow',
+      context: 'laptop',
+      status: 'todo',
+      tags: ['admin'],
+      createdAt: Date.now() - 86400000 * 9,
+      updatedAt: Date.now() - 86400000 * 9,
+    },
+    {
+      title: 'Screen 3 candidate resumes',
+      notes: '',
+      domain: 'work',
+      projectId: hiringId,
+      priority: 2,
+      estimateMin: 45,
+      focusLevel: 'medium',
+      dueDate: iso(-1),
+      context: 'laptop',
+      status: 'todo',
+      tags: [],
+      createdAt: Date.now() - 86400000 * 3,
+      updatedAt: Date.now() - 86400000 * 3,
+    },
+    {
+      title: 'Book dentist appointment',
+      notes: '',
+      domain: 'personal',
+      projectId: healthId,
+      priority: 3,
+      estimateMin: 10,
+      focusLevel: 'shallow',
+      dueDate: iso(1),
+      context: 'phone',
+      status: 'todo',
+      tags: ['errand'],
+      createdAt: Date.now() - 86400000 * 12,
+      updatedAt: Date.now() - 86400000 * 12,
+    },
+    {
+      // Shows what "blocked" looks like: real, open, and deliberately absent
+      // from today's recommendations until the note is cleared.
+      title: 'Fix leaking kitchen tap',
+      notes: '',
+      domain: 'personal',
+      projectId: homeId,
+      priority: 2,
+      estimateMin: 60,
+      focusLevel: 'medium',
+      context: 'home',
+      blockedNote: 'the replacement washer arriving',
+      status: 'todo',
+      tags: [],
+      createdAt: Date.now() - 86400000 * 6,
+      updatedAt: Date.now() - 86400000 * 6,
+    },
+    {
+      title: 'Plan next quarter training block',
+      notes: '',
+      domain: 'personal',
+      projectId: healthId,
+      priority: 3,
+      estimateMin: 40,
+      focusLevel: 'deep',
+      context: 'laptop',
+      status: 'todo',
+      tags: [],
+      createdAt: Date.now() - 86400000 * 2,
+      updatedAt: Date.now() - 86400000 * 2,
+    },
+    {
+      // And what "not before" looks like: nothing to do about it this week,
+      // so it stays out of the way until it can actually be started.
+      title: 'Return the parcel to the post office',
+      notes: '',
+      domain: 'personal',
+      priority: 3,
+      estimateMin: 20,
+      focusLevel: 'shallow',
+      dueDate: iso(9),
+      startDate: iso(3),
+      context: 'errand',
+      status: 'todo',
+      tags: [],
+      createdAt: Date.now() - 86400000,
+      updatedAt: Date.now() - 86400000,
+    },
+  ];
+
+  await db.tasks.bulkAdd(samples.map((task) => ({ ...task, uid: newUid() })));
 }
 
 export { db };

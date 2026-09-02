@@ -658,4 +658,6 @@ eq("anything else carries GitHub's own words", refusals.other,
 eq('and an unset repository is caught before any request', refusals.notConfigured, 'BackupNotConfiguredError');
 
 await run(`await f.reset();`);
-r.done();
+const passed = r.done(t.errors);
+t.close();
+process.exit(passed ? 0 : 1);

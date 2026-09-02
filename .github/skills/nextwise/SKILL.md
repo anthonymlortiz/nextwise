@@ -201,6 +201,13 @@ Rules:
 
 ### Dexie gotchas
 
+- **The demo board seeds from `db.on('populate')`, not from an emptiness check.** That hook
+  fires once, inside the transaction that creates the database, which answers "is this a
+  first run?" by construction. An emptiness test can't: deleting your last project made it
+  answer yes again, and the next reload handed back the whole demo set. `seedIfEmpty()` is
+  now just a memoised `db.open()`.
+- **`db.on('populate')` only waits for async work if the handler *returns* the promise.**
+  `void runSeed()` lets the creation transaction commit while the seed is still writing.
 - **`db.tasks.update()` silently ignores `undefined` values**, so it cannot clear a field.
   To clear one, `put()` the whole object: `db.tasks.put({ ...task, dueDate: undefined })`.
   To remove the key entirely, `.modify(t => { delete t.x })`.
@@ -216,7 +223,12 @@ module, a fake, and one row in `registry.ts`. It should mean **zero** changes to
 Invariants that exist for a reason — don't "simplify" them away:
 
 - **Deletions are pushed before anything is pulled**, so a task deleted locally can't be
-  resurrected by the same run.
+  resurrected by the same run. When a push *fails* the ordering isn't enough on its own,
+  so `pushDeletions` returns the `remoteId`s it couldn't remove and the pull skips exactly
+  those. The tombstone survives for the next run to retry. Without this, a delete that
+  failed on the network came back as an unrecognised remote record — re-created with a
+  *new* `uid`, which no grave can suppress, so it reached the JSON backup as a genuinely
+  new task.
 - **Lists are adopted by name and tasks by title** when they have no link. Without this,
   "Reset links" duplicates the entire board on the next sync.
 - **A list deleted remotely unlinks the project**, it does not delete local tasks.
@@ -525,10 +537,17 @@ Suites, in run order (`migration` must stay first — it rebuilds the database f
 | `fields.mjs` | context, blocked and earliest-start: semantics, filtering, both sync round-trips, jAIme, and the on-screen badges |
 | `session.mjs` | the focus session: timer maths, Start removing the board, reload survival, pause/extend/checklist, every "I'm stuck" branch, starting from a row on any tab, and that none of it syncs |
 | `backup.mjs` | the GitHub board file: portable ids, every merge and deletion rule, the write race, export/import round trip, and the real client's requests against a stubbed `fetch` |
+| `resurrect.mjs` | that a deleted record stays deleted: a failed provider delete, a delete made on another device, and the demo seed after the last project is removed |
 | `prod.mjs` | the production bundle (run separately via `npm run test:prod`) |
 
 Conventions:
 
+- **Every suite must end by calling `process.exit`.** The CDP WebSocket keeps the event
+  loop alive, so a suite that merely returns hangs `run.sh` forever — its status is never
+  checked and no suite listed after it ever runs. The tail is
+  `const passed = r.done(t.errors); t.close(); process.exit(passed ? 0 : 1);`
+- Output is buffered until a suite exits, so a hung suite is indistinguishable from a slow
+  one. Redirect the run to a file and `tail` it to see where it actually stopped.
 - Chat is tested against `fakeClaude.ts`, never a real key. Tool executors are called
   directly (fast, precise) *and* driven through the UI (proves the loop) — splitting the
   two stops a tool bug from looking like a loop bug.
@@ -544,9 +563,10 @@ Conventions:
   `[data-session-clock]`, `[data-checklist-item]`, `[data-stuck-menu]`. Substring matching
   in particular is a trap here — a blocked row *quotes the title of the task blocking it*,
   so `rows.find(el => el.innerText.includes(title))` will happily find the wrong row.
-- **A UI suite that clears `projects` re-seeds the demo board on the next reload**
-  (`seedIfEmpty` runs whenever the table is empty). If a suite navigates after a reset,
-  insert a placeholder project first or it will be asserting against the seed data too.
+- **The demo board seeds from `db.on('populate')`, i.e. exactly once per database.**
+  Clearing tables does *not* bring it back, so a suite that resets between navigations
+  keeps its own fixture. Conversely, a suite that wants the seed must delete the whole
+  database (`indexedDB.deleteDatabase('ProductivityDB')`) — see `tests/resurrect.mjs`.
 - **`window.__f`-style page harnesses die on `Page.navigate`.** Re-install after every
   reload. Also, `Runtime.evaluate` has no top-level `await` — wrap in an async IIFE.
 - **Match a button by its first line, not its whole `innerText`**, wherever it carries an
