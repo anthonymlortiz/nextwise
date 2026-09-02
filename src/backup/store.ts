@@ -1,4 +1,4 @@
-import { db, newUid } from '../db';
+import { db, isExampleUid, newUid } from '../db';
 import type { Project, Task } from '../types';
 import {
   buildSnapshot,
@@ -30,6 +30,36 @@ export async function recordGrave(kind: 'task' | 'project', uid: string): Promis
   const existing = await db.graveyard.where('[kind+uid]').equals([kind, uid]).first();
   if (existing) return;
   await db.graveyard.add({ kind, uid, deletedAt: Date.now() });
+}
+
+/**
+ * Removes the demo board from a device that has never been used for real work.
+ *
+ * A new browser, device or domain creates a new database, which seeds the
+ * examples. Connecting that device to an existing board would merge them
+ * upward, where four projects and eight tasks nobody wrote look exactly like
+ * work someone added. So they are dropped first — but only while the board is
+ * *nothing but* examples. One record of the user's own means this is a real
+ * board and the examples on it are theirs to keep or delete.
+ *
+ * No graves are recorded. A grave would travel to the shared board and delete
+ * the same examples on a device where the user had decided to keep them; and
+ * if the shared board genuinely holds examples, the merge that follows will
+ * hand them back, which is the right answer.
+ */
+export async function discardUntouchedExamples(): Promise<number> {
+  const [tasks, projects] = await Promise.all([db.tasks.toArray(), db.projects.toArray()]);
+  const rows = [...tasks, ...projects];
+  if (rows.length === 0) return 0;
+  if (!rows.every((row) => isExampleUid(row.uid))) return 0;
+
+  const taskIds = tasks.map((t) => t.id).filter((id): id is number => id !== undefined);
+  const projectIds = projects.map((p) => p.id).filter((id): id is number => id !== undefined);
+  await db.transaction('rw', db.tasks, db.projects, async () => {
+    await db.tasks.bulkDelete(taskIds);
+    await db.projects.bulkDelete(projectIds);
+  });
+  return taskIds.length + projectIds.length;
 }
 
 function projectRow(snap: SnapshotProject, id?: number): Project {

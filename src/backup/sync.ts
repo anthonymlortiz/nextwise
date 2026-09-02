@@ -8,7 +8,7 @@ import {
   parseSnapshot,
   type Snapshot,
 } from './snapshot';
-import { applySnapshot, readLocal, type ApplyCounts } from './store';
+import { applySnapshot, discardUntouchedExamples, readLocal, type ApplyCounts } from './store';
 
 export interface BackupResult {
   /** What the file taught this device. */
@@ -51,6 +51,13 @@ export async function runBackup(store: FileStore, now: number = Date.now()): Pro
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const existing = await store.read();
     const theirs = existing ? parseSnapshot(existing.text) : emptySnapshot(now);
+
+    // A device that has only ever shown the demo board is not a second opinion
+    // about what the board contains, so it gets no say in the merge.
+    if (theirs.tasks.length > 0 || theirs.projects.length > 0) {
+      await discardUntouchedExamples();
+    }
+
     const mine = await readLocal(now);
     const { merged, localStale, remoteStale } = mergeSnapshots(mine, theirs, now);
 

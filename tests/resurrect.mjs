@@ -18,8 +18,15 @@ await js(`window.__h = (() => {
     focusLevel:'medium', status:'todo', tags:[], createdAt:now(), updatedAt:now(), ...p });
   const P = (p={}) => ({ name:'P', domain:'work', color:'#6366f1', archived:0,
     createdAt:now(), updatedAt:now(), ...p });
+  const file = new backup.FakeGitHubFile();
   return {
-    T, P, db, links, backup, recordTombstone, FakeGraphClient,
+    T, P, db, links, backup, recordTombstone, FakeGraphClient, file,
+    runBackup() { return backup.runBackup(file, Date.now()); },
+    /** Wipes the board without touching the shared file, i.e. a second device. */
+    async newDevice() {
+      await db.tasks.clear(); await db.projects.clear(); await db.graveyard.clear();
+      await db.tombstones.clear(); await db.syncLinks.clear();
+    },
     async reset() {
       await db.tasks.clear(); await db.projects.clear();
       await db.tombstones.clear(); await db.syncState.clear();
@@ -127,7 +134,53 @@ R.section('4. A genuinely new remote task is still pulled in');
   R.ok('new remote task arrives', r.titles.includes('From phone'), JSON.stringify(r.titles));
 }
 
-R.section('5. Deleting every project does not re-seed the demo board');
+R.section('5. A new device does not merge its demo board into a real one');
+{
+  const r = await run(`
+    await h.newDevice();
+    h.file.text = null; h.file.sha = '';
+    // Device one: a real board, saved to the shared file.
+    await h.db.tasks.add(h.T({title:'Real work'}));
+    await h.runBackup();
+
+    // Device two: a fresh database, so the seed has just run. The uids are the
+    // stable ones the seed writes, which is what marks them as examples.
+    await h.newDevice();
+    await h.db.projects.add(h.P({name:'Hiring', uid:'example:project:hiring'}));
+    await h.db.tasks.add(h.T({title:'Review PR #482', uid:'example:task:review-pr-482'}));
+    await h.runBackup();
+
+    return { titles: await h.titles(), names: await h.projectNames(),
+             file: JSON.parse(h.file.text).tasks.map(t => t.title).sort() };
+  `);
+  R.ok('the examples are dropped locally', !r.titles.includes('Review PR #482'), JSON.stringify(r.titles));
+  R.ok('the example project is dropped too', r.names.length === 0, JSON.stringify(r.names));
+  R.ok('the real board arrives instead', JSON.stringify(r.titles) === '["Real work"]', JSON.stringify(r.titles));
+  R.ok('the shared file is left clean', JSON.stringify(r.file) === '["Real work"]', JSON.stringify(r.file));
+}
+
+R.section('6. A board with real work on it keeps its examples');
+{
+  const r = await run(`
+    await h.newDevice();
+    h.file.text = null; h.file.sha = '';
+    await h.db.tasks.add(h.T({title:'Real work'}));
+    await h.runBackup();
+
+    // The user kept an example and added something of their own next to it.
+    // That makes it their board, and none of it is ours to throw away.
+    await h.newDevice();
+    await h.db.tasks.add(h.T({title:'Review PR #482', uid:'example:task:review-pr-482'}));
+    await h.db.tasks.add(h.T({title:'Mine'}));
+    await h.runBackup();
+
+    return { titles: await h.titles() };
+  `);
+  R.ok('the kept example survives', r.titles.includes('Review PR #482'), JSON.stringify(r.titles));
+  R.ok('so does the real task', r.titles.includes('Mine'), JSON.stringify(r.titles));
+}
+
+R.section('7. Deleting every project does not re-seed the demo board');
 {
   await run(`
     await h.reset();
@@ -148,7 +201,7 @@ R.section('5. Deleting every project does not re-seed the demo board');
   R.ok('no demo tasks appear', JSON.stringify(r.titles) === '["Mine"]', JSON.stringify(r.titles));
 }
 
-R.section('6. A genuinely new database still gets its examples');
+R.section('8. A genuinely new database still gets its examples');
 {
   // Deleting the database, rather than clearing its tables, is the point: the
   // seed is meant to fire on first run, and only a fresh database is that.

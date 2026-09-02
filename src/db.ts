@@ -200,6 +200,25 @@ export { PALETTE };
 let seedPromise: Promise<void> | null = null;
 
 /**
+ * Marks a record as demo data rather than the user's own.
+ *
+ * The example records carry stable, derived uids instead of random ones so that
+ * every device seeds *the same* four projects and eight tasks. Random uids made
+ * each device's copy a distinct record: connecting a second browser merged a
+ * duplicate demo board into the real one, and deleting the examples on one
+ * device left graves that matched nothing anywhere else. With a stable uid the
+ * existing merge rules do the right thing on their own — the same example is
+ * the same record everywhere, and deleting it once buries it for good.
+ */
+export function exampleUid(kind: 'task' | 'project', name: string): string {
+  return `example:${kind}:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
+
+export function isExampleUid(uid: string): boolean {
+  return uid.startsWith('example:');
+}
+
+/**
  * Populates a first-run example set so the recommender has something to reason
  * about immediately.
  *
@@ -232,7 +251,7 @@ async function runSeed(): Promise<void> {
   const iso = (offsetDays: number) => addDays(today, offsetDays);
 
   const platformId = await db.projects.add({
-    uid: newUid(),
+    uid: exampleUid('project', 'Platform Migration'),
     name: 'Platform Migration',
     domain: 'work',
     color: PALETTE[0],
@@ -241,7 +260,7 @@ async function runSeed(): Promise<void> {
     updatedAt: Date.now(),
   });
   const hiringId = await db.projects.add({
-    uid: newUid(),
+    uid: exampleUid('project', 'Hiring'),
     name: 'Hiring',
     domain: 'work',
     color: PALETTE[2],
@@ -250,7 +269,7 @@ async function runSeed(): Promise<void> {
     updatedAt: Date.now(),
   });
   const homeId = await db.projects.add({
-    uid: newUid(),
+    uid: exampleUid('project', 'Home'),
     name: 'Home',
     domain: 'personal',
     color: PALETTE[3],
@@ -259,7 +278,7 @@ async function runSeed(): Promise<void> {
     updatedAt: Date.now(),
   });
   const healthId = await db.projects.add({
-    uid: newUid(),
+    uid: exampleUid('project', 'Health'),
     name: 'Health',
     domain: 'personal',
     color: PALETTE[4],
@@ -392,7 +411,7 @@ async function runSeed(): Promise<void> {
     },
   ];
 
-  await db.tasks.bulkAdd(samples.map((task) => ({ ...task, uid: newUid() })));
+  await db.tasks.bulkAdd(samples.map((task) => ({ ...task, uid: exampleUid('task', task.title) })));
 }
 
 export { db };

@@ -206,6 +206,10 @@ Rules:
   first run?" by construction. An emptiness test can't: deleting your last project made it
   answer yes again, and the next reload handed back the whole demo set. `seedIfEmpty()` is
   now just a memoised `db.open()`.
+- **Example records carry stable uids** (`example:project:hiring`), not random ones, so the
+  same example is the same record on every device. With random uids a second browser merged
+  a duplicate demo board into the real one and graves matched nothing anywhere else.
+  `isExampleUid()` is the test; keep the seed's uids derived from its names.
 - **`db.on('populate')` only waits for async work if the handler *returns* the promise.**
   `void runSeed()` lets the creation transaction commit while the seed is still writing.
 - **`db.tasks.update()` silently ignores `undefined` values**, so it cannot clear a field.
@@ -342,7 +346,8 @@ failure the feature exists to prevent.
 
 ```
 snapshot.ts    the document format and every merge rule (pure, no Dexie, no network)
-store.ts       the Dexie side: readLocal, applySnapshot, recordGrave, backfillUids
+store.ts       the Dexie side: readLocal, applySnapshot, recordGrave, backfillUids,
+               discardUntouchedExamples
 github.ts      the FileStore interface and its GitHub Contents API implementation
 config.ts      repo coordinates, token storage, parseRepoInput
 sync.ts        runBackup: read -> merge -> apply -> write, retried on conflict
@@ -352,6 +357,13 @@ useBackup.ts   the React hook: debounced save, refresh on focus
 
 Rules worth knowing before changing any of it:
 
+- **A device holding nothing but the demo board gets no say in the merge.** `runBackup`
+  calls `discardUntouchedExamples()` before reading local state whenever the shared file
+  has content, because a new browser, device or domain creates a new database, which seeds
+  the examples, which would otherwise merge upward as eight tasks nobody wrote. One record
+  of the user's own means it is a real board and nothing is discarded. No graves are
+  recorded — they would travel to the shared board and delete the examples on a device
+  where the user had chosen to keep them.
 - **`mergeSnapshots` must be commutative.** Both devices have to produce a byte-identical
   document from the same pair of inputs, or they ping-pong forever. That is why conflicts
   on an equal `updatedAt` break the tie on `JSON.stringify` rather than "prefer mine", and
@@ -537,7 +549,7 @@ Suites, in run order (`migration` must stay first — it rebuilds the database f
 | `fields.mjs` | context, blocked and earliest-start: semantics, filtering, both sync round-trips, jAIme, and the on-screen badges |
 | `session.mjs` | the focus session: timer maths, Start removing the board, reload survival, pause/extend/checklist, every "I'm stuck" branch, starting from a row on any tab, and that none of it syncs |
 | `backup.mjs` | the GitHub board file: portable ids, every merge and deletion rule, the write race, export/import round trip, and the real client's requests against a stubbed `fetch` |
-| `resurrect.mjs` | that a deleted record stays deleted: a failed provider delete, a delete made on another device, and the demo seed after the last project is removed |
+| `resurrect.mjs` | that a deleted record stays deleted, and that demo data never merges into a real board: a failed provider delete, a delete made on another device, the seed after the last project is removed, and a fresh device connecting to an existing board |
 | `prod.mjs` | the production bundle (run separately via `npm run test:prod`) |
 
 Conventions:
